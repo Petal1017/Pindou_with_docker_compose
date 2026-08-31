@@ -1,0 +1,48 @@
+name: pindou-studio
+
+services:
+  app:
+    image: ${PINDOU_IMAGE:-ghcr.io/petal1017/pindou_with_docker_compose:latest}
+    pull_policy: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # This URL is used by the browser and must be reachable from the client.
+      SUPABASE_URL: ${SUPABASE_URL:-http://localhost:55321}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+    ports:
+      - "${PINDOU_PORT:-17600}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    image: ${PINDOU_BACKEND_IMAGE:-ghcr.io/petal1017/pindou_with_docker_compose-backend:latest}
+    pull_policy: always
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - supabase-docker:/var/lib/docker
+    ports:
+      - "${SUPABASE_API_PORT:-55321}:55321"
+      - "${SUPABASE_DB_PORT:-54322}:54322"
+      - "${SUPABASE_STUDIO_PORT:-54323}:54323"
+      - "${SUPABASE_MAIL_PORT:-54324}:54324"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:55321/auth/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
+    restart: unless-stopped
+    stop_grace_period: 2m
+
+volumes:
+  supabase-docker:

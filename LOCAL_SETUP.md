@@ -113,3 +113,32 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 生产 Compose 不构建源码，也不包含特权模式、Docker-in-Docker 或数据库数据卷。Supabase 需独立部署，`SUPABASE_URL` 必须是访问页面的浏览器可以访问的地址。
+
+## 前端与本地后端双容器示例
+
+`docker-compose-example.yml` 会拉取两个 GHCR 镜像：
+
+- `ghcr.io/petal1017/pindou_with_docker_compose:latest`：前端与 Nginx。
+- `ghcr.io/petal1017/pindou_with_docker_compose-backend:latest`：仓库内的 Supabase migrations、seed 和 Edge Function。
+
+启动：
+
+```powershell
+docker compose -f docker-compose-example.yml up -d
+docker compose -f docker-compose-example.yml ps
+```
+
+首次启动后端会继续下载 Supabase 的 PostgreSQL、Auth、REST、Realtime、Storage 等官方镜像，因此可能需要数分钟。前端会等待后端健康检查通过后再启动。数据保存在 `supabase-docker` volume；普通的 `down` 不会删除它，只有带 `-v` 才会清空本地账号、作品与数据库。
+
+后端镜像使用 Docker-in-Docker 将完整 Supabase 服务栈封装为一个 Compose 服务，所以 `backend` 必须启用 `privileged: true`。它适合本地或单机部署，不建议作为公网生产数据库架构；生产环境仍推荐标准 Supabase self-hosting Compose 或托管 Supabase。
+
+默认地址：
+
+- 应用：http://localhost:17600
+- Supabase API：http://localhost:55321
+- Supabase Studio：http://localhost:54323
+- 本地邮件收件箱：http://localhost:54324
+
+从其他电脑访问时，应在 `.env` 把 `SUPABASE_URL` 设置为 Docker 主机的 LAN 地址，例如 `http://192.168.1.10:55321`，因为浏览器中的 `localhost` 始终指向访问者自己的电脑。
+
+`.github/workflows/backend-ghcr.yml` 在后端定义发生变化或手动触发时，发布 `linux/amd64` 与 `linux/arm64` 的后端镜像。
