@@ -1,0 +1,736 @@
+@import "tailwindcss";
+
+:root {
+  /* 手作暖调 (warm handcraft) design tokens */
+  --bg-primary: #fdfbf7;
+  --bg-secondary: #f7f1e6;
+  --bg-tertiary: #f1e8d9;
+  --text-primary: #2b2420;
+  --text-secondary: #6f6259;
+  --text-muted: #a3968a;
+  --border-color: #efe6da;
+  --accent: #e8734a;
+  --accent-hover: #d35f38;
+  --accent-soft: #fbe4d8;
+  --secondary-accent: #4a9b8e;
+  --secondary-accent-hover: #3d8377;
+  --error: #e5484d;
+  --error-bg: #fdf0ee;
+  --error-border: #f5d3cd;
+  --success: #4a9b8e;
+  --warning: #cf8a2c;
+  --warning-bg: #fbf0dc;
+  --warning-border: #f0dcb3;
+  --shadow-sm: rgba(43, 36, 32, 0.04);
+  --shadow-md: rgba(43, 36, 32, 0.08);
+  --shadow-lg: rgba(43, 36, 32, 0.14);
+  --shadow: var(--shadow-md);
+  --shadow-card: 0 4px 16px rgba(232, 115, 74, 0.08);
+  --radius-card: 14px;
+
+  /* Typography — 通用界面字体：跨平台 CJK 优先，兼顾中/日/韩/英四语言 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Kaku Gothic ProN", "Malgun Gothic", "Microsoft YaHei",
+    "Noto Sans SC", Helvetica, Arial, sans-serif;
+  /* 等宽字体：仅用于色号 / HEX 值 / 表格式数字对齐场景。不依赖 Google Fonts，
+     直接用系统自带等宽字体，避免国内网络环境下 fonts.googleapis.com 加载失败/超时 */
+  --font-mono: Menlo, Consolas, Monaco, "Liberation Mono", "Courier New", monospace;
+  /* 展示字体(标题/品牌/强调)：霞鹜文楷，手作艺术感 —— 桌面端启用 */
+  --font-display: "LXGW WenKai", "Noto Sans SC", var(--font-sans);
+
+  /* Font size scale */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 20px;
+  --text-3xl: 28px;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  /* iOS 上 100vh 是大视口（URL 栏收起时的全屏高度），会让文档比可见区域
+     高出一个 URL 栏、页面在 body 层可滚动，后台恢复时整页被上推。
+     100svh 恒等于 URL 栏展开时的可见高度，文档不溢出、不可滚动。 */
+  min-height: 100vh;
+  min-height: 100svh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: calc(var(--vh, 1svh) * 100);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+input, button, textarea, select {
+  font-family: inherit;
+}
+
+/* 移动/平板(≤1024px)整体上调字号 token 一档:typography token 基准
+   (--text-base 13px)在手机/平板屏幕偏小(引入 token 前组件字号为 14-16px;
+   组件样式 328 处直接引用 var(--text-*),只调 body 无效),桌面端保持原 token */
+@media (max-width: 1024px) {
+  :root {
+    --text-xs: 12px;
+    --text-sm: 13px;
+    --text-base: 14px;
+    --text-md: 15px;
+    --text-lg: 17px;
+    --text-xl: 19px;
+    --text-2xl: 21px;
+    --text-3xl: 30px;
+  }
+}
+
+/* iOS Safari 会在聚焦 font-size < 16px 的文本输入控件时自动放大页面，
+   松开后不会自动缩回 100%，需要用户手动双指缩放复位。这里统一兜底：
+   移动/平板宽度下所有文本类输入控件强制 ≥16px，覆盖各组件内部更小的字号设置。
+   range/checkbox/radio/file 等非文本控件不触发该行为，排除以免影响原有视觉样式。 */
+@media (max-width: 1024px) {
+  input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+button {
+  cursor: pointer;
+}
+
+input:focus, textarea:focus, button:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0; /* 全屏 modal 固定 top:0;不用视觉视口偏移(iOS 键盘弹时 offsetTop 变负会把整层顶偏露白) */
+  left: 0;
+  right: 0;
+  /* iOS Safari 键盘弹起时改为可视高度(--visible-vh 由 useKeyboardSafe 监听 visualViewport 更新) */
+  height: var(--visible-vh, 100vh);
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  /* 参考图机制:顶对齐(超高不裁顶)+ overlay 自身滚动(超高可滚到底),
+     + 可触摸滚动 —— 顶部完整、底部总能滚到,键盘弹起时随高度收缩 */
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* iOS 平滑原生滚动 */
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  padding: 16px;
+  box-sizing: border-box;
+  /* 阻止滚动穿透:模态框上滑动不带动下层页面 */
+  overscroll-behavior: contain;
+}
+
+.modal-content {
+  background: var(--bg-primary);
+  border-radius: var(--radius-card);
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+  /* 上下 24px 边距 + 顶对齐:正常时居中偏上;超高时随 overlay 滚动,顶部不被裁、底部可到底 */
+  margin: 24px auto;
+  box-shadow: 0 20px 60px rgba(43, 36, 32, 0.18);
+  box-sizing: border-box;
+}
+/* 注册/登录弹窗滚动条 — 统一站点风格 */
+/* ── 全屏浮层打开时,淡出画布底部工具栏(个人主页/联系我们等弹窗出现时,
+      底部 fixed 工具栏挡在 modal 下方,使其无法滚到底部按钮 —— 采纳用户建议用淡出清除) ── */
+body:has(.contact-overlay) .mobile-toolbar,
+body:has(.modal-overlay) .mobile-toolbar,
+body:has(.image-quantizer-overlay) .mobile-toolbar,
+body:has(.profile-overlay) .mobile-toolbar,
+body:has(.admin-modal-overlay) .mobile-toolbar,
+body:has(.users-confirm-overlay) .mobile-toolbar,
+body:has(.profile-confirm-overlay) .mobile-toolbar {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.modal-content::-webkit-scrollbar {
+  width: 6px;
+}
+.modal-content::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 3px;
+}
+.modal-content::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+.modal-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+  .modal-content {
+    padding: 24px 20px;
+  }
+}
+
+/* Save Dialog (global — used by both desktop and mobile layouts) */
+.save-dialog {
+  background: var(--bg-primary);
+  border-radius: var(--radius-card);
+  padding: 24px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 40px rgba(43, 36, 32, 0.18);
+}
+.save-dialog h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+.save-dialog label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: -4px;
+}
+.save-dialog input {
+  padding: 10px 12px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 16px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.save-dialog input:focus {
+  border-color: var(--accent);
+  outline: none;
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-card);
+}
+.save-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+/* 匿名用户保存作品时的注册软引导(紧贴保存按钮下方,不打断保存流程) */
+.save-local-hint {
+  border-top: 1px dashed var(--border-color);
+  padding-top: 12px;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.save-local-hint p {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.save-local-hint .link-btn {
+  align-self: flex-start;
+  font-size: var(--text-xs);
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus {
+  border-color: var(--accent);
+}
+
+.form-group input.error {
+  border-color: var(--error);
+}
+
+.form-group .error-message {
+  color: var(--error);
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.form-group .hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--shadow-md);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  background: var(--text-muted);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  border-color: var(--accent);
+  background: var(--bg-secondary);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.btn-full {
+  width: 100%;
+}
+
+/* Tab Styles */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.tab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: 0 2px 4px var(--shadow);
+}
+
+.tab:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+/* Utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* Gallery & Tutorials Pages */
+.gallery-page,
+.tutorials-page {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.template-card,
+.work-card {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* ==================== Layout Styles ==================== */
+
+.app {
+  height: calc(var(--vh, 1vh) * 100);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  flex-shrink: 0;
+  height: 60px;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-top: 60px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.workspace {
+  flex: 1;
+  display: flex;
+  gap: 0;
+  overflow: visible;
+  min-height: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.left-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.left-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+.left-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.left-sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.right-sidebar {
+  width: auto;
+  overflow: visible;
+}
+
+.canvas-area {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--bg-secondary);
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Scrollbar Styles */
+.canvas-area::-webkit-scrollbar,
+.palette-scroll::-webkit-scrollbar,
+.tools-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.canvas-area::-webkit-scrollbar-track,
+.palette-scroll::-webkit-scrollbar-track,
+.tools-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.canvas-area::-webkit-scrollbar-thumb,
+.palette-scroll::-webkit-scrollbar-thumb,
+.tools-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.canvas-area::-webkit-scrollbar-thumb:hover,
+.palette-scroll::-webkit-scrollbar-thumb:hover,
+.tools-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .workspace {
+    flex-direction: column;
+    align-items: center;
+  }
+  .sidebar {
+    width: 100%;
+    max-width: 500px;
+  }
+}
+
+/* Mobile Layout */
+.mobile-layout .header {
+  position: relative;
+}
+
+.mobile-layout {
+  /* 用 svh（小视口）而非 100vh/dvh：iOS Safari 上 100vh 等于「大视口」
+     （URL 栏收起时的全屏高度），比可见区域高出一个 URL 栏，页面在 body 层
+     可滚动，后台标签页恢复时整页被上推、导航栏顶到状态栏后面。
+     svh 恒等于 URL 栏展开时的可见高度，布局永不溢出，不会上推。
+     旧浏览器回退 100vh；--vh 由 App.jsx 按 svh 语义实时测量（小视口），
+     并覆盖键盘弹起等动态场景。 */
+  height: 100vh;
+  height: 100svh;
+  height: calc(var(--vh, 1svh) * 100);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 移动端基础样式 */
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+
+  body {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* 禁用双击缩放 */
+  * {
+    touch-action: manipulation;
+  }
+}
+
+/* 平板适配 */
+@media (min-width: 641px) and (max-width: 1024px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+/* 桌面端 */
+@media (min-width: 1025px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+/* 隐藏桌面侧边栏在移动端 */
+@media (max-width: 1024px) {
+  .left-sidebar,
+  .right-sidebar {
+    display: none !important;
+  }
+}
+
+/* 画布画面：底部为双行工具栏（约96px）+ 色卡收起条（约64px）留空间 */
+.mobile-canvas-area {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  padding-bottom: calc(8px + 64px);
+}
+
+/* 平板(640–1023px)：底部工具栏更大、色卡条更高，为画布预留更大底部空间 */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .mobile-canvas-area {
+    padding: 12px;
+    padding-bottom: calc(8px + 172px);
+  }
+}
+
+/* 图库 / 教程页面在移动端的容器：占满 header 和底部工具栏之间的空间，自行滚动 */
+.mobile-page-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Left Sidebar Layout */
+.left-sidebar-top {
+  flex-shrink: 0;
+}
+
+.left-sidebar-bottom {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Scrollbar styling for left sidebar */
+.left-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.left-sidebar::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 3px;
+}
+
+.left-sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.left-sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 8px 0;
+  flex-shrink: 0;
+}
+
+/* Tools drawer in sidebar context */
+.tools-drawer {
+  flex-shrink: 0;
+}
+
+/* Palette drawer in sidebar context */
+.right-sidebar .palette-drawer {
+  height: 100%;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   桌面端(≥1025px)字体与排版打磨
+   Windows 上微软雅黑渲染粗糙:正文改用思源黑体(Noto Sans SC),
+   标题/品牌/强调用霞鹜文楷(LXGW WenKai,手作艺术感,契合拼豆创作)。
+   移动端(≤1024px)保持系统字体栈,完全不受影响。
+   ───────────────────────────────────────────────────────────── */
+@media (min-width: 1025px) {
+  body {
+    font-family: "Noto Sans SC", var(--font-sans);
+    letter-spacing: 0.01em;
+  }
+  /* 标题 / 品牌 / 强调文本 → 霞鹜文楷 */
+  h1, h2, h3, h4, h5,
+  .logo-text,
+  .nav-link,
+  .admin-title,
+  .admin-card h3,
+  .template-name,
+  .work-name,
+  .section-title,
+  .filter-tab,
+  .category-btn,
+  .difficulty-btn,
+  .save-dialog h3,
+  .modal-content .auth-header h2 {
+    font-family: var(--font-display);
+    letter-spacing: 0.02em;
+  }
+  /* 数字密集场景:尺寸 / 色号 / 百分比 / 统计 → 表格数字对齐 */
+  .canvas-info,
+  .info-size,
+  .info-scale,
+  .template-size,
+  .color-stats,
+  .palette-count,
+  .admin-template-sub,
+  .admin-category-id,
+  .tools-grid-size {
+    font-variant-numeric: tabular-nums;
+  }
+  /* 字体平滑(Windows 上改善抗锯齿) */
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+}

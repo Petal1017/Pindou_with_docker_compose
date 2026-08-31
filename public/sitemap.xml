@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+
+  <!-- 首页 -->
+  <url>
+    <loc>https://tangnotes.site/</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://tangnotes.site/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tangnotes.site/?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://tangnotes.site/?lang=ja"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://tangnotes.site/?lang=ko"/>
+  </url>
+
+  <!-- 图库 -->
+  <url>
+    <loc>https://tangnotes.site/gallery</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://tangnotes.site/gallery"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tangnotes.site/gallery?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://tangnotes.site/gallery?lang=ja"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://tangnotes.site/gallery?lang=ko"/>
+  </url>
+
+  <!-- 教程 -->
+  <url>
+    <loc>https://tangnotes.site/tutorials</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://tangnotes.site/tutorials"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tangnotes.site/tutorials?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://tangnotes.site/tutorials?lang=ja"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://tangnotes.site/tutorials?lang=ko"/>
+  </url>
+
+  <!-- 隐私政策 -->
+  <url>
+    <loc>https://tangnotes.site/privacy</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <!-- 服务条款 -->
+  <url>
+    <loc>https://tangnotes.site/terms</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+</urlset>

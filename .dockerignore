@@ -1,0 +1,12 @@
+.git
+.github
+.npm-cache
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+supabase/.branches
+supabase/.temp
+verify-output
+*.log

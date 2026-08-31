@@ -1,0 +1,261 @@
+.mobile-color-palette {
+  display: none;
+  position: fixed;
+  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  right: 0;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
+  padding: 12px;
+  z-index: 99;
+}
+
+@media (max-width: 1024px) {
+  .mobile-color-palette {
+    display: block;
+  }
+}
+
+.current-color-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  min-height: 44px;
+}
+
+.color-preview {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+/* 色号 + 具体颜色名称（如"玉米黄"）纵向堆叠，普通用户不用记色号也能认出颜色 */
+.color-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.color-name {
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+/* 所属品牌与色号(如 "MARD 拼豆 · A1"),帮助分辨哪个色卡的珠子 */
+.color-brand {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.mobile-stats-badge {
+  flex: 1;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toggle-icon {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.palette-expanded {
+  margin-top: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.palette-brands {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  /* 低调滑动条:隐藏滚动条,仅靠滑动交互,不影响视觉观感 */
+  scrollbar-width: none;
+}
+
+.palette-brands::-webkit-scrollbar {
+  display: none;
+}
+
+.brand-tab {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+  min-height: 28px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.brand-tab:active {
+  transform: scale(0.95);
+}
+
+.brand-tab.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+.recent-colors {
+  margin-bottom: 12px;
+}
+
+.section-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 8px;
+}
+
+/* 色系分组(如 MARD:黄橙色调/绿色调/...) */
+.palette-group {
+  margin-bottom: 6px;
+}
+
+.palette-group-title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  padding: 8px 0 6px;
+  border-top: 1px solid var(--border-color);
+  display: block;
+}
+
+.color-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 触控目标：36px 起（配合 gap 后有效间距接近可访问性建议的 44px），
+   避免拼豆色卡颜色多达 100 色时误触邻近色块 */
+.color-row .color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.color-row .color-swatch.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px white, 0 0 0 4px var(--accent);
+}
+
+/* 色卡网格：每个色块下面直接印出"色号 中文名"，不再只靠长按才出现的 title 提示 */
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 8px;
+}
+
+.color-swatch-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.color-swatch-item:active {
+  background: var(--bg-tertiary);
+}
+
+.color-swatch-item.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.color-swatch-item .color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.color-swatch-label {
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.color-swatch-item.selected .color-swatch-label {
+  color: var(--accent-hover);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ── 平板(640–1023px)色卡适配 ──────────────────────────────
+   底部工具栏变大后相应抬高色卡,展开色卡更高以利用大屏纵向空间 */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .mobile-color-palette {
+    bottom: calc(124px + env(safe-area-inset-bottom, 0px));
+    padding: 14px 18px;
+  }
+  .current-color-btn {
+    min-height: 48px;
+    border-radius: 10px;
+    padding: 8px 14px;
+  }
+  .color-preview {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
+  .palette-expanded {
+    max-height: 300px;
+  }
+  .color-swatch-item .color-swatch {
+    width: 40px;
+    height: 40px;
+  }
+  .color-swatch-label {
+    font-size: 12px;
+  }
+}

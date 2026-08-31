@@ -1,0 +1,18 @@
+name: pindou-studio
+
+services:
+  app:
+    image: ${PINDOU_IMAGE:?Set PINDOU_IMAGE to the GHCR image, for example ghcr.io/owner/pindou-studio:latest}
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL to the browser-accessible Supabase URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?Set SUPABASE_ANON_KEY}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+    ports:
+      - "${PINDOU_PORT:-5280}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped

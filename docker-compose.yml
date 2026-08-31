@@ -1,0 +1,21 @@
+name: pindou-studio
+
+services:
+  app:
+    image: ${PINDOU_IMAGE:-pindou-studio:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:-http://localhost:55321}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+    ports:
+      - "${PINDOU_PORT:-5280}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped

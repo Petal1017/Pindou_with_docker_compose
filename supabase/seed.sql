@@ -1,0 +1,2 @@
+-- Application templates and categories are seeded by migration 0009.
+-- Keep this file because supabase/config.toml enables db.seed.

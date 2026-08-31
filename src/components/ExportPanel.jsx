@@ -1,0 +1,722 @@
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import { getPalette } from '../data/palettes'
+import { exportAsPNG, exportAsSVG, createScaledCanvas } from '../services/BeadPatternExporter'
+import { resolveToHex } from '../services/colorUtils'
+
+export default function ExportPanel({ canvasData, gridSize, gridWidth, gridHeight, designName, paletteId = 'perler', onClose }) {
+  const { t } = useTranslation()
+  const effectiveName = designName || t('export.defaultName')
+  // Passing onClose signals this instance is the mobile modal entry point —
+  // it should open already expanded instead of requiring a second click.
+  const isModal = !!onClose
+  const [showExport, setShowExport] = useState(isModal)
+  const [exportProgress, setExportProgress] = useState(0)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState(null)
+  const [exportInfo, setExportInfo] = useState('') // 导出后显示实际分辨率(验证超采样生效)
+  const [beadStyle, setBeadStyle] = useState('professional')
+  const palette = getPalette(paletteId)
+  const panelRef = useRef(null)
+
+  // Desktop sidebar instance: when expanding, scroll the panel fully into
+  // view within the scrolling .left-sidebar ancestor. Skip for the mobile
+  // modal, which already renders full-height and has its own overlay scroll.
+  useEffect(() => {
+    if (!showExport || isModal || !panelRef.current) return
+    const raf = requestAnimationFrame(() => {
+      const panel = panelRef.current
+      // 只滚动 .left-sidebar 本身:scrollIntoView 会级联滚动「所有」可滚动祖先,
+      // 包括 overflow:hidden 的 .main-content/.app 等。平板横屏可视视口被浏览器
+      // UI 压缩时这些祖先存在溢出,级联会把右栏(画布 + 色卡)一起抬高无法还原。
+      const scroller = panel.closest('.left-sidebar')
+      if (!scroller) return
+      const panelRect = panel.getBoundingClientRect()
+      const scrollerRect = scroller.getBoundingClientRect()
+      const targetTop = panelRect.bottom - scrollerRect.top - scroller.clientHeight
+      if (targetTop > scroller.scrollTop) {
+        scroller.scrollTo({ top: targetTop, behavior: 'smooth' })
+      }
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [showExport, isModal])
+
+  // 导出任务取消:组件卸载时中止进行中的分帧导出
+  // (此前 rAF 分帧无取消机制,模态关闭后导出继续后台跑完整个网格)
+  const exportAbortRef = useRef(null)
+  useEffect(() => {
+    return () => exportAbortRef.current?.abort()
+  }, [])
+
+  // Actual dimensions (support rectangular grids)
+  const actualWidth = gridWidth || gridSize
+  const actualHeight = gridHeight || gridSize
+
+  const { colorCounts, totalBeads } = useMemo(() => {
+    if (!canvasData) return { colorCounts: {}, totalBeads: 0 }
+    const counts = {}
+    for (let y = 0; y < actualHeight; y++) {
+      for (let x = 0; x < actualWidth; x++) {
+        const color = canvasData[y]?.[x]
+        if (color) counts[color] = (counts[color] || 0) + 1
+      }
+    }
+    return { colorCounts: counts, totalBeads: Object.values(counts).reduce((a, b) => a + b, 0) }
+  }, [canvasData, actualWidth, actualHeight])
+
+  const handleExportImage = async () => {
+    if (!canvasData || isExporting) return
+    setIsExporting(true)
+    try {
+      const CELL_SIZE = 20
+      const BEAD_RADIUS = CELL_SIZE / 2 - 1
+
+      const canvasWidth = actualWidth * CELL_SIZE
+      const canvasHeight = actualHeight * CELL_SIZE
+      // 与 BeadPatternExporter 同套超采样逻辑:面积预算 + 分配失败自动降级(质量×性能平衡)
+      let canvas, scale
+      try {
+        ;({ canvas, scale } = createScaledCanvas(canvasWidth, canvasHeight))
+      } catch (e) {
+        setExportError(t('export.canvasTooLarge'))
+        return
+      }
+      const ctx = canvas.getContext('2d')
+      ctx.scale(scale, scale)
+
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+
+      const abortCtrl = new AbortController()
+      exportAbortRef.current = abortCtrl
+
+      // 分帧渲染:每 2000 格让出主线程(此前 4 万次 arc+fill 同步阻塞 UI 数秒)
+      const BATCH = 2000
+      let drawn = 0
+      for (let y = 0; y < actualHeight; y++) {
+        for (let x = 0; x < actualWidth; x++) {
+          if (abortCtrl.signal.aborted) return
+          const color = canvasData[y]?.[x]
+          const hex = resolveToHex(color, palette)
+          if (hex) {
+            ctx.fillStyle = hex
+            ctx.beginPath()
+            ctx.arc(
+              x * CELL_SIZE + CELL_SIZE / 2,
+              y * CELL_SIZE + CELL_SIZE / 2,
+              BEAD_RADIUS,
+              0, Math.PI * 2
+            )
+            ctx.fill()
+          }
+          if (++drawn % BATCH === 0) await new Promise(r => requestAnimationFrame(r))
+        }
+      }
+
+      setExportInfo(`${canvas.width}×${canvas.height}`)
+      // toBlob 替代 toDataURL:高 scale 大画布时避免 base64 内存峰值翻倍
+      const blob = await new Promise((resolve) => {
+        canvas.toBlob((b) => resolve(b), 'image/png')
+      })
+      if (!blob) throw new Error('PNG encoding failed')
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.download = `bead-pattern-${actualWidth}x${actualHeight}.png`
+      link.href = url
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } finally {
+      exportAbortRef.current = null
+      setIsExporting(false)
+    }
+  }
+
+  const handleExportText = () => {
+    // 生成带颜色编号的文本图纸
+    const today = new Date().toISOString().split('T')[0]
+    // 色号按当前调色板 hex→品牌 ID(P01/H01/C01)映射,支持全部品牌与自定义色
+    // (替代旧的 UI 硬编码 44 色表:量化/移动端/Hama/Artkal 颜色命中率基本为 0)
+    const codeByHex = new Map(palette.colors.map(c => [c.hex.toLowerCase(), c.id]))
+
+    let text = `拼豆图纸\n`
+    text += `${actualWidth} x ${actualHeight} 格子\n`
+    text += `日期：${today}\n`
+    text += `${'═'.repeat(Math.max(actualWidth, actualHeight) * 3 + 10)}\n\n`
+
+    // 颜色对照表（按使用频率排序）
+    const sortedColors = Object.entries(colorCounts).sort((a, b) => b[1] - a[1])
+    text += `【颜色对照表】\n`
+    sortedColors.forEach(([color, count]) => {
+      const code = codeByHex.get(color.toLowerCase()) || '--'
+      text += `  [${code}] ${color} - ${count}颗\n`
+    })
+    text += '\n'
+
+    // 带编号的图纸
+    text += `【图纸】每格一个数字，00表示空\n`
+    text += `${'─'.repeat(Math.max(actualWidth, actualHeight) * 3 + 3)}\n`
+
+    // 列编号
+    text += '   '
+    for (let x = 0; x < actualWidth; x++) {
+      text += String.fromCharCode(65 + (x % 26))  // A, B, C... 循环
+    }
+    text += '\n'
+
+    for (let y = 0; y < actualHeight; y++) {
+      text += String(y + 1).padStart(3, ' ') + ' '
+      for (let x = 0; x < actualWidth; x++) {
+        const color = canvasData[y]?.[x]
+        if (color) {
+          text += codeByHex.get(color.toLowerCase()) || '??'
+        } else {
+          text += '  '
+        }
+        text += ' '
+      }
+      text += '\n'
+    }
+
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const link = document.createElement('a')
+    link.download = `bead-pattern-${actualWidth}x${actualHeight}.txt`
+    link.href = URL.createObjectURL(blob)
+    link.click()
+  }
+
+  const handleExportSVG = () => {
+    if (!canvasData) return
+
+    const CELL_SIZE = 20
+    const BEAD_RADIUS = CELL_SIZE / 2 - 1
+
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${actualWidth * CELL_SIZE} ${actualHeight * CELL_SIZE}">\n`
+    svg += `  <rect width="${actualWidth * CELL_SIZE}" height="${actualHeight * CELL_SIZE}" fill="white"/>\n`
+
+    for (let y = 0; y < actualHeight; y++) {
+      for (let x = 0; x < actualWidth; x++) {
+        const color = canvasData[y]?.[x]
+        const hex = resolveToHex(color, palette)
+        if (hex) {
+          const cx = x * CELL_SIZE + CELL_SIZE / 2
+          const cy = y * CELL_SIZE + CELL_SIZE / 2
+          svg += `  <circle cx="${cx}" cy="${cy}" r="${BEAD_RADIUS}" fill="${hex}"/>\n`
+        }
+      }
+    }
+    svg += '</svg>'
+
+    const blob = new Blob([svg], { type: 'image/svg+xml' })
+    const link = document.createElement('a')
+    link.download = `bead-pattern-${actualWidth}x${actualHeight}.svg`
+    link.href = URL.createObjectURL(blob)
+    link.click()
+  }
+
+  const handleExportPatternSheet = async () => {
+    if (!canvasData || isExporting) return
+    setIsExporting(true)
+    setExportProgress(0)
+    setExportError(null)
+    try {
+      const abortCtrl = new AbortController()
+      exportAbortRef.current = abortCtrl
+      setExportInfo('')
+      await exportAsPNG(canvasData, gridSize, paletteId, effectiveName, palette, {
+        gridWidth,
+        gridHeight,
+        beadStyle,
+        signal: abortCtrl.signal,
+        onProgress: (_phase, pct) => setExportProgress(Math.round(pct * 100)),
+        onResolution: (w, h) => setExportInfo(`${w}×${h}`)
+      })
+    } catch (err) {
+      if (err?.name === 'AbortError') return // 组件卸载取消,非错误
+      console.error('Export failed:', err)
+      setExportError(t('export.exportFailed'))
+    } finally {
+      exportAbortRef.current = null
+      setIsExporting(false)
+      setExportProgress(0)
+    }
+  }
+
+  const handleExportPatternSheetSVG = () => {
+    if (!canvasData) return
+    exportAsSVG(canvasData, gridSize, paletteId, effectiveName, palette, gridWidth, gridHeight, beadStyle)
+  }
+
+  // ── 导出确认流程:空画布拦截 + 有内容时确认 ──────────────
+  const [confirmExport, setConfirmExport] = useState(null) // { type: 'empty' } | { type: 'confirm', label, handler }
+  const hasPaintedCells = useMemo(() =>
+    canvasData?.some(row => row.some(cell => cell)) || false,
+    [canvasData]
+  )
+
+  const requestExport = (label, desc, styleName, handler) => {
+    if (!canvasData) return
+    if (!hasPaintedCells) {
+      setConfirmExport({ type: 'empty' })
+      return
+    }
+    setConfirmExport({ type: 'confirm', label, desc, styleName, handler })
+  }
+
+  // 专业图纸当前风格名称(用于确认框展示)
+  const currentStyleName = beadStyle === 'professional'
+    ? t('gallery.exportProfessional')
+    : t('gallery.exportRealistic')
+
+  const panel = (
+    <div className="export-panel" ref={panelRef}>
+      <button
+        className="export-toggle"
+        onClick={() => setShowExport(!showExport)}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7,10 12,15 17,10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        {t('export.title')}
+        {!isModal && <span className={`arrow ${showExport ? 'up' : ''}`}>▼</span>}
+        {isModal && (
+          <span
+            className="export-modal-close"
+            role="button"
+            aria-label={t('common.close')}
+            onClick={(e) => { e.stopPropagation(); onClose() }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </span>
+        )}
+      </button>
+
+      {showExport && (
+        <div className="export-content">
+          <div className="export-section">
+            <div className="section-heading">
+              <span className="section-title">{t('export.quickSection')}</span>
+              <span className="section-hint">{t('export.quickSectionHint')}</span>
+            </div>
+            <div className="export-buttons">
+              <button onClick={() => requestExport(t('export.png'), t('export.pngDesc'), null, handleExportImage)} className="btn btn-secondary" disabled={isExporting}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21,15 16,10 5,21"/>
+                </svg>
+                {t('export.png')}
+              </button>
+              <button onClick={() => requestExport(t('export.svg'), t('export.svgDesc'), null, handleExportSVG)} className="btn btn-secondary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="12,2 2,7 12,12 22,7 12,2"/>
+                  <polyline points="2,17 12,22 22,17"/>
+                  <polyline points="2,12 12,17 22,12"/>
+                </svg>
+                {t('export.svg')}
+              </button>
+              <button onClick={() => requestExport(t('export.text'), t('export.textDesc'), null, handleExportText)} className="btn btn-secondary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14,2 14,8 20,8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                {t('export.text')}
+              </button>
+            </div>
+          </div>
+
+          <div className="export-divider" />
+
+          <div className="export-section">
+            <div className="section-heading">
+              <span className="section-title">{t('export.proSection')}</span>
+              <span className="section-hint">{t('export.proSectionHint')}</span>
+            </div>
+            <div className="export-style-group">
+              <label className="style-label">{t('export.styleLabel')}</label>
+              <select
+                value={beadStyle}
+                onChange={e => setBeadStyle(e.target.value)}
+                className="style-select"
+              >
+                <option value="professional">{t('gallery.exportProfessional')}</option>
+                <option value="realistic">{t('gallery.exportRealistic')}</option>
+              </select>
+              <span className="setting-hint">
+                {beadStyle === 'professional'
+                  ? t('export.professionalHint')
+                  : t('export.realisticHint')}
+              </span>
+            </div>
+            <div className="export-buttons">
+              <button onClick={() => requestExport(t('export.patternSheet'), beadStyle === 'professional' ? t('export.professionalDesc') : t('export.realisticDesc'), currentStyleName, handleExportPatternSheet)} className="btn btn-primary btn-pattern" disabled={isExporting}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="3" y1="9" x2="21" y2="9"/>
+                  <line x1="3" y1="15" x2="21" y2="15"/>
+                  <line x1="9" y1="3" x2="9" y2="21"/>
+                  <line x1="15" y1="3" x2="15" y2="21"/>
+                </svg>
+                {isExporting ? `${t('export.exporting')} ${exportProgress}%` : t('export.patternSheet')}
+              </button>
+              {isExporting && (
+                <div style={{ height: 4, background: 'var(--bg-tertiary)', borderRadius: 2, margin: '4px 0' }}>
+                  <div style={{ height: '100%', width: `${exportProgress}%`, background: 'var(--secondary-accent)', borderRadius: 2, transition: 'width 0.1s' }} />
+                </div>
+              )}
+              {exportError && (
+                <div style={{ fontSize: 11, color: 'var(--error)', padding: '4px 2px', lineHeight: 1.4 }}>
+                  {exportError}
+                </div>
+              )}
+              {exportInfo && (
+                <div style={{ fontSize: 11, color: 'var(--secondary-accent)', padding: '4px 2px', lineHeight: 1.4 }}>
+                  ✓ {t('export.resolution')}: {exportInfo}
+                </div>
+              )}
+              <button onClick={() => requestExport(t('export.patternSheetSVG'), beadStyle === 'professional' ? t('export.professionalDesc') : t('export.realisticDesc'), currentStyleName, handleExportPatternSheetSVG)} className="btn btn-secondary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="3" y1="9" x2="21" y2="9"/>
+                  <line x1="3" y1="15" x2="21" y2="15"/>
+                  <line x1="9" y1="3" x2="9" y2="21"/>
+                  <line x1="15" y1="3" x2="15" y2="21"/>
+                </svg>
+                {t('export.patternSheetSVG')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .export-panel {
+          background: var(--bg-primary);
+          border: 1px solid var(--border-color);
+          border-radius: 12px;
+          width: 100%;
+        }
+        .export-toggle {
+          width: 100%;
+          padding: 12px 16px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: var(--text-base);
+          font-weight: var(--font-weight-semibold);
+          background: none;
+          border: none;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+        .export-toggle:hover {
+          background: var(--bg-secondary);
+        }
+        .arrow {
+          margin-left: auto;
+          font-size: var(--text-xs);
+          transition: transform 0.2s;
+        }
+        .arrow.up {
+          transform: rotate(180deg);
+        }
+        .export-content {
+          padding: 0 12px 12px;
+        }
+        .export-stats {
+          display: flex;
+          gap: 16px;
+          padding: 12px;
+          background: var(--bg-secondary);
+          border-radius: 8px;
+          margin-bottom: 12px;
+        }
+        .stat {
+          display: flex;
+          flex-direction: column;
+        }
+        .stat-value {
+          font-size: var(--text-xl);
+          font-weight: var(--font-weight-semibold);
+        }
+        .stat-label {
+          font-size: var(--text-xs);
+          color: var(--text-muted);
+          text-transform: uppercase;
+        }
+        .color-legend {
+          margin-bottom: 12px;
+        }
+        .color-legend h4 {
+          font-size: var(--text-xs);
+          color: var(--text-secondary);
+          margin-bottom: 6px;
+        }
+        .legend-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+        }
+        .legend-item {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 6px;
+          background: var(--bg-secondary);
+          border-radius: 4px;
+        }
+        .legend-color {
+          width: 12px;
+          height: 12px;
+          border-radius: 2px;
+          border: 1px solid var(--border-color);
+        }
+        .legend-count {
+          font-family: var(--font-mono);
+          font-size: var(--text-xs);
+          font-weight: var(--font-weight-semibold);
+        }
+        .export-buttons {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .export-buttons .btn {
+          justify-content: flex-start;
+          padding: 10px 12px;
+          font-size: var(--text-sm);
+        }
+        .export-divider {
+          height: 1px;
+          background: var(--border-color);
+          margin: 8px 0;
+        }
+        .btn-pattern {
+          background: linear-gradient(135deg, var(--accent) 0%, #c25a34 100%);
+          color: white;
+          border: none;
+          font-weight: var(--font-weight-semibold);
+        }
+        .btn-pattern:hover {
+          background: linear-gradient(135deg, #c25a34 0%, #a84a29 100%);
+        }
+        .export-style-group {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 4px 0 2px;
+        }
+        .style-label {
+          font-size: var(--text-xs);
+          font-weight: var(--font-weight-semibold);
+          color: var(--text-secondary);
+        }
+        .style-select {
+          width: 100%;
+          padding: 6px 8px;
+          border: 1px solid var(--border-color);
+          border-radius: 6px;
+          background: var(--bg-secondary);
+          font-size: var(--text-sm);
+          cursor: pointer;
+          color: var(--text-primary);
+        }
+        .setting-hint {
+          font-size: var(--text-xs);
+          color: var(--text-muted);
+          line-height: 1.3;
+        }
+        .export-modal-close {
+          margin-left: auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 4px;
+          border-radius: 4px;
+          color: var(--text-muted);
+          transition: all 0.2s;
+        }
+        .export-modal-close:hover {
+          color: var(--text-primary);
+          background: var(--bg-tertiary);
+        }
+        .export-section {
+          padding-top: 10px;
+        }
+        .section-heading {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          margin-bottom: 8px;
+        }
+        .section-title {
+          font-size: var(--text-sm);
+          font-weight: var(--font-weight-bold);
+          color: var(--text-primary);
+        }
+        .section-hint {
+          font-size: var(--text-xs);
+          color: var(--text-muted);
+          line-height: 1.3;
+        }
+      `}</style>
+    </div>
+  )
+
+  // ── 导出确认 / 空画布提示 模态框(PC 与移动端共用) ─────────
+  const confirmDialog = confirmExport && (
+    <div className="modal-overlay export-confirm-overlay" onClick={() => setConfirmExport(null)}>
+      <div className="export-confirm-dialog" onClick={e => e.stopPropagation()}>
+        {confirmExport.type === 'empty' ? (
+          <>
+            <div className="export-confirm-icon empty">✕</div>
+            <h3>{t('export.emptyTitle')}</h3>
+            <p>{t('export.emptyText')}</p>
+            <button className="btn btn-primary" onClick={() => setConfirmExport(null)}>
+              {t('export.gotIt')}
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="export-confirm-icon">⤓</div>
+            <h3>{t('export.confirmTitle')}</h3>
+            <p>{t('export.confirmText')}</p>
+            <div className="export-settings-summary">
+              <div className="export-setting-row">
+                <span className="export-setting-key">{t('export.formatLabel')}</span>
+                <span className="export-setting-value">{confirmExport.label}</span>
+              </div>
+              <div className="export-setting-row">
+                <span className="export-setting-key">{t('export.descLabel')}</span>
+                <span className="export-setting-value">{confirmExport.desc}</span>
+              </div>
+              {confirmExport.styleName && (
+                <div className="export-setting-row">
+                  <span className="export-setting-key">{t('export.styleLabel')}</span>
+                  <span className="export-setting-value">{confirmExport.styleName}</span>
+                </div>
+              )}
+            </div>
+            <div className="export-confirm-actions">
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setConfirmExport(null)
+                  confirmExport.handler()
+                }}
+              >
+                {t('export.confirmBtn')}
+              </button>
+              <button className="btn btn-ghost" onClick={() => setConfirmExport(null)}>
+                {t('common.cancel')}
+              </button>
+            </div>
+          </>
+        )}
+        <style>{`
+          .export-confirm-overlay { z-index: 1200; }
+          .export-confirm-dialog {
+            background: var(--bg-primary);
+            border-radius: var(--radius-card);
+            padding: 28px 24px;
+            width: min(380px, 92vw);
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(43, 36, 32, 0.2);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+          }
+          .export-confirm-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-size: 26px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .export-confirm-icon.empty {
+            background: var(--warning-bg);
+            color: var(--warning);
+          }
+          .export-confirm-dialog h3 {
+            margin: 0;
+            font-size: var(--text-xl);
+          }
+          .export-confirm-dialog p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: var(--text-md);
+            line-height: 1.6;
+            word-break: break-word;
+          }
+          .export-confirm-dialog .btn { margin-top: 4px; }
+          .export-confirm-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+          }
+          .export-settings-summary {
+            width: 100%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            text-align: left;
+          }
+          .export-setting-row {
+            display: flex;
+            gap: 10px;
+            font-size: var(--text-sm);
+            line-height: 1.5;
+          }
+          .export-setting-key {
+            color: var(--text-muted);
+            flex-shrink: 0;
+            min-width: 40px;
+          }
+          .export-setting-value {
+            color: var(--text-primary);
+            font-weight: 500;
+          }
+        `}</style>
+      </div>
+    </div>
+  )
+
+  if (!isModal) return (
+    <>
+      {panel}
+      {confirmDialog}
+    </>
+  )
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="export-modal-content" onClick={(e) => e.stopPropagation()}>
+        {panel}
+      </div>
+      {confirmDialog}
+      <style>{`
+        .export-modal-content {
+          width: min(420px, 92vw);
+          max-height: 80vh;
+          overflow-y: auto;
+        }
+      `}</style>
+    </div>
+  )
+}
