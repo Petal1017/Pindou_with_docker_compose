@@ -4,19 +4,22 @@ ARG TARGETARCH
 ARG SUPABASE_CLI_VERSION=2.116.0
 
 RUN apk add --no-cache curl ca-certificates \
-    && asset="supabase_${SUPABASE_CLI_VERSION}_linux_${TARGETARCH}.tar.gz" \
+    && asset="supabase_${SUPABASE_CLI_VERSION}_linux_${TARGETARCH}.apk" \
     && base_url="https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}" \
     && case "$TARGETARCH" in \
-         amd64) checksum="5b3031cb297d51b25be4c284e4c852254460ec722ec221d3b81b07d55acfd158" ;; \
-         arm64) checksum="015a45756bb8459716a4b44b020605adc11956cd7d0bd5824aec2ed1c8287933" ;; \
+         amd64) checksum="4cdea6f7df3c6d463b80c017f48343811624bb3f1503751d8f6554d8d1f78d66" ;; \
+         arm64) checksum="adfa621face129dfbf20cc7c2ad83ecdc8534cda78f760f4daddb13e95612421" ;; \
          *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
        esac \
-    && curl -fsSLo "/tmp/${asset}" "${base_url}/${asset}" \
+    && curl -fL --retry 8 --retry-all-errors --retry-delay 2 \
+       --continue-at - --output "/tmp/${asset}" "${base_url}/${asset}" \
     && echo "${checksum}  /tmp/${asset}" | sha256sum -c - \
-    && tar -xzf "/tmp/${asset}" -C /usr/local/bin supabase \
-    && rm -f "/tmp/${asset}"
+    && apk add --no-cache --allow-untrusted "/tmp/${asset}" \
+    && rm -f "/tmp/${asset}" \
+    && supabase --version
 
 ENV DOCKER_TLS_CERTDIR=""
+ENV TINI_SUBREAPER=1
 WORKDIR /workspace
 
 COPY supabase ./supabase

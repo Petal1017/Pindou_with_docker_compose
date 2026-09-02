@@ -13,7 +13,7 @@ shutdown() {
 
 trap shutdown INT TERM EXIT
 
-/usr/local/bin/dockerd-entrypoint.sh \
+/usr/local/bin/dockerd-entrypoint.sh dockerd \
   --host=unix:///var/run/docker.sock \
   --storage-driver="${DOCKER_DRIVER:-overlay2}" &
 dockerd_pid=$!
