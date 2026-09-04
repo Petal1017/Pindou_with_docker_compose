@@ -28,15 +28,15 @@ services:
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR: ""
+      # Keep application features, omit Supabase dashboard/analytics helpers.
+      PINDOU_SUPABASE_EXCLUDE: ${PINDOU_SUPABASE_EXCLUDE:-studio,postgres-meta,imgproxy,logflare,vector,supavisor}
     volumes:
       - supabase-docker:/var/lib/docker
     ports:
       - "${SUPABASE_API_PORT:-55321}:55321"
-      - "${SUPABASE_DB_PORT:-54322}:54322"
-      - "${SUPABASE_STUDIO_PORT:-54323}:54323"
-      - "${SUPABASE_MAIL_PORT:-54324}:54324"
+      - "127.0.0.1:${SUPABASE_MAIL_PORT:-54324}:54324"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:55321/auth/v1/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:55321/auth/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 30

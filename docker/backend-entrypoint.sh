@@ -28,7 +28,12 @@ until docker info >/dev/null 2>&1; do
   sleep 2
 done
 
-supabase start --workdir /workspace
+exclude_services="${PINDOU_SUPABASE_EXCLUDE:-studio,postgres-meta,imgproxy,logflare,vector,supavisor}"
+if [ -n "$exclude_services" ]; then
+  supabase start --yes --workdir /workspace --exclude "$exclude_services"
+else
+  supabase start --yes --workdir /workspace
+fi
 
 while kill -0 "$dockerd_pid" >/dev/null 2>&1; do
   sleep 5

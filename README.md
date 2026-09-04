@@ -2,7 +2,9 @@
 
 > **把灵感一颗一颗烫进珠子里。** 专业的在线拼豆图纸设计工具 —— 从像素到实物,一站式创作。
 
-[![CI](https://github.com/Aswellle/Pindou-Studio/actions/workflows/ci.yml/badge.svg)](https://github.com/Aswellle/Pindou-Studio/actions/workflows/ci.yml)
+[![CI](https://github.com/Petal1017/Pindou_with_docker_compose/actions/workflows/ci.yml/badge.svg)](https://github.com/Petal1017/Pindou_with_docker_compose/actions/workflows/ci.yml)
+[![Frontend Container](https://github.com/Petal1017/Pindou_with_docker_compose/actions/workflows/ghcr.yml/badge.svg)](https://github.com/Petal1017/Pindou_with_docker_compose/actions/workflows/ghcr.yml)
+[![Backend Container](https://github.com/Petal1017/Pindou_with_docker_compose/actions/workflows/backend-ghcr.yml/badge.svg)](https://github.com/Petal1017/Pindou_with_docker_compose/actions/workflows/backend-ghcr.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite)](https://vitejs.dev)
@@ -12,6 +14,8 @@
 **六个品牌色卡 · 千余种配色 · 四种语言 · 十八篇教程 · 云端账号体系**
 
 拼豆Studio 是一款开箱即用的拼豆图纸在线设计工具:自由绘制、图片智能转图纸、专业图纸导出、云端模板库与账号体系一应俱全。无论是第一次拿起 Pegboard 的新手,还是追求精致作品的进阶玩家,都能在这里找到属于自己的创作节奏。
+
+本分支提供完全本地化的 Docker 部署：前端和自托管 Supabase 后端分别发布到 GHCR，通过一个 Compose 文件启动，不依赖作者的云服务器。
 
 ---
 
@@ -78,25 +82,82 @@
 
 ## 🚀 快速开始
 
-### 环境要求
-- Node.js 18+
-- npm 9+
+### Docker 一键部署（推荐）
+
+环境要求：Docker Engine 24+ 和 Docker Compose v2。后端使用 Docker-in-Docker 封装完整 Supabase 服务栈，因此宿主机必须允许 `privileged` 容器；不支持该能力的平台不能使用此后端镜像。
+
+```bash
+git clone https://github.com/Petal1017/Pindou_with_docker_compose.git
+cd Pindou_with_docker_compose
+cp .env.example .env
+docker compose -f docker-compose-example.yml up -d
+docker compose -f docker-compose-example.yml ps
+```
+
+Windows PowerShell 使用：
+
+```powershell
+Copy-Item .env.example .env
+docker compose -f docker-compose-example.yml up -d
+docker compose -f docker-compose-example.yml ps
+```
+
+首次启动后端会继续拉取 PostgreSQL、Auth、REST、Realtime、Storage 和 Edge Runtime 等 Supabase 官方镜像，并执行仓库内迁移，耗时取决于网络和磁盘性能。等待 `backend` 与 `app` 都显示 `healthy` 后访问：
+
+- 应用：http://localhost:17600
+- Supabase API：http://localhost:55321
+- 本地验证码邮件：http://127.0.0.1:54324（仅回环地址）
+
+默认部署使用轻量服务集，关闭 Studio、Postgres Meta、图片代理、日志分析和连接池辅助服务，保留登录注册、REST/RPC、Realtime、头像存储、Edge Function 及验证码邮件收件箱。数据库和内部镜像保存在 `supabase-docker` volume；普通 `down` 不删除数据，`down -v` 会永久清空本地账号、作品和数据库。
+
+```bash
+# 查看日志
+docker compose -f docker-compose-example.yml logs -f backend
+
+# 更新两个 GHCR 镜像
+docker compose -f docker-compose-example.yml pull
+docker compose -f docker-compose-example.yml up -d --force-recreate
+
+# 停止但保留数据
+docker compose -f docker-compose-example.yml down
+```
+
+镜像地址：
+
+```text
+ghcr.io/petal1017/pindou_with_docker_compose:latest
+ghcr.io/petal1017/pindou_with_docker_compose-backend:latest
+```
+
+### 2C2G 服务器说明
+
+2 核 2 GB 是这套自托管 Supabase 的最低尝试配置，不是宽裕配置。建议配置至少 2 GB swap，预留足够磁盘空间，并避免同机运行其他高内存服务。部署后使用 `docker stats` 和 `docker system df` 观察资源；若内存长期接近 1.7 GB、频繁使用 swap 或发生 OOM，应升级到 4 GB，或改用托管/标准自托管 Supabase。
+
+对公网部署时，必须通过 HTTPS 反向代理同时暴露应用和 Supabase API，并将 `.env` 中的 `SUPABASE_URL` 改为浏览器可访问的公网 HTTPS 地址。不要将 PostgreSQL 或内部 Docker daemon 端口暴露到公网。
+
+### 源码开发
+
+环境要求：Node.js 22、npm 和已启动的 Docker Engine。
 
 ### 安装与开发
 
 ```bash
-git clone https://github.com/Aswellle/Pindou-Studio.git
-cd Pindou-Studio/bead-studio
-npm install
-npm run dev
+git clone https://github.com/Petal1017/Pindou_with_docker_compose.git
+cd Pindou_with_docker_compose
+npm ci
+npm run dev:local
 ```
 
-开发服务器启动在 **http://localhost:5280**(局域网可通过 `http://<本机IP>:5280` 访问)。
+`dev:local` 会启动本地 Supabase、生成 `.env.local`，再启动 Vite。开发服务器位于 **http://localhost:5280**。
 
 ### 常用命令
 
 ```bash
 npm run dev            # 开发服务器(热更新)
+npm run dev:local      # 启动本地 Supabase 后再运行开发服务器
+npm run backend:start  # 仅启动本地 Supabase
+npm run backend:stop   # 停止本地 Supabase
+npm run backend:reset  # 清空数据库并重新执行迁移和 seed
 npm run build          # 生产构建(含子页面静态 HTML)
 npm run preview        # 本地预览构建产物
 npm run test           # 测试(watch 模式)
@@ -116,7 +177,7 @@ npm run check-i18n     # 验证 4 个语言文件键名一致性
 | 颜色科学 | CIEDE2000(Lab 空间)+ K-means++(Web Worker) |
 | 状态管理 | React `useState` / `useReducer`(无全局 store) |
 | 测试 | Vitest + @testing-library/react,75 用例 |
-| 部署 | Vercel(push 到 main 自动部署)+ Supabase |
+| 部署 | Docker Compose + GHCR 多架构镜像（linux/amd64、linux/arm64） |
 
 ---
 
@@ -172,13 +233,26 @@ npm run test:run
 | `tutorial-progress` | 已读教程 ID |
 | `custom-templates` / `custom-categories` | 本地模式自定义模板/分类(云端未配置时的回退) |
 
-**云端(Supabase,需配置 `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`)**:
+**Supabase 后端（Docker 容器通过运行时 `SUPABASE_URL` + `SUPABASE_ANON_KEY` 注入）**:
 | 表 | 内容 |
 |----|------|
 | `works` | 登录用户的云端作品(`user_id`/`saved_at`/`name` 唯一),RLS 本人可读写 |
 | `templates` / `categories` | 云端模板库与分类,匿名公开只读、管理员写入(RLS),`templates` 含 `source`/`palette_id`/`download_count` |
 | `profiles` | 昵称、头像、`role`(admin)、自定义账号 `security_key_hash`;`avatars` 存储桶存头像 |
 | `download_count`(RPC) | 匿名可调用的模板下载量递增函数 |
+
+Docker 部署的数据位于命名卷 `supabase-docker`。备份、迁移或删除 Compose 文件之前，请先制定 PostgreSQL 和 Storage 数据备份方案；不要把容器本身当作数据备份。
+
+---
+
+## 📦 容器发布
+
+推送到 `main` 后，GitHub Actions 会分别构建并发布前端与后端镜像。推送 `v*` tag 时会额外生成对应版本标签；两个工作流均发布 `linux/amd64` 和 `linux/arm64`。
+
+- `.github/workflows/ghcr.yml`：前端多阶段构建，最终镜像只包含 Nginx 和静态资源。
+- `.github/workflows/backend-ghcr.yml`：打包 Supabase CLI、数据库迁移、seed 和 Edge Function。
+
+前端配置在容器启动时写入 `/runtime-config.js`，因此切换 Supabase 地址不需要重新构建前端镜像。完整的本地部署和管理员创建说明见 [LOCAL_SETUP.md](LOCAL_SETUP.md)。
 
 ---
 

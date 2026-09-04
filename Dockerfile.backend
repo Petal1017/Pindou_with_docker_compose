@@ -3,7 +3,8 @@ FROM docker:27-dind
 ARG TARGETARCH
 ARG SUPABASE_CLI_VERSION=2.116.0
 
-RUN apk add --no-cache curl ca-certificates \
+RUN apk add --no-cache ca-certificates \
+    && apk add --no-cache --virtual .fetch-deps curl \
     && asset="supabase_${SUPABASE_CLI_VERSION}_linux_${TARGETARCH}.apk" \
     && base_url="https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}" \
     && case "$TARGETARCH" in \
@@ -16,7 +17,8 @@ RUN apk add --no-cache curl ca-certificates \
     && echo "${checksum}  /tmp/${asset}" | sha256sum -c - \
     && apk add --no-cache --allow-untrusted "/tmp/${asset}" \
     && rm -f "/tmp/${asset}" \
-    && supabase --version
+    && supabase --version \
+    && apk del .fetch-deps
 
 ENV DOCKER_TLS_CERTDIR=""
 ENV TINI_SUBREAPER=1
@@ -27,9 +29,9 @@ COPY docker/backend-entrypoint.sh /usr/local/bin/pindou-backend-entrypoint
 
 RUN chmod +x /usr/local/bin/pindou-backend-entrypoint
 
-EXPOSE 55321 54322 54323 54324
+EXPOSE 55321
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=180s --retries=30 \
-  CMD curl -fsS http://127.0.0.1:55321/auth/v1/health >/dev/null || exit 1
+  CMD wget -q --spider http://127.0.0.1:55321/auth/v1/health || exit 1
 
 ENTRYPOINT ["/usr/local/bin/pindou-backend-entrypoint"]

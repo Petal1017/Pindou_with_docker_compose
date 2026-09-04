@@ -130,14 +130,18 @@ docker compose -f docker-compose-example.yml ps
 
 首次启动后端会继续下载 Supabase 的 PostgreSQL、Auth、REST、Realtime、Storage 等官方镜像，因此可能需要数分钟。前端会等待后端健康检查通过后再启动。数据保存在 `supabase-docker` volume；普通的 `down` 不会删除它，只有带 `-v` 才会清空本地账号、作品与数据库。
 
+双容器示例默认使用适合小型服务器的轻量功能集，通过 `PINDOU_SUPABASE_EXCLUDE=studio,postgres-meta,imgproxy,logflare,vector,supavisor` 关闭数据库管理界面及其元数据接口、图片转换、日志分析和连接池辅助服务。登录、数据库 REST/RPC、Realtime、头像原图存储、Edge Function 与验证码邮件收件箱仍然保留。不要把排除列表加入 `gotrue`、`postgrest`、`realtime`、`storage-api`、`edge-runtime` 或 `mailpit`，否则对应的前端功能会失效。
+
 后端镜像使用 Docker-in-Docker 将完整 Supabase 服务栈封装为一个 Compose 服务，所以 `backend` 必须启用 `privileged: true`。它适合本地或单机部署，不建议作为公网生产数据库架构；生产环境仍推荐标准 Supabase self-hosting Compose 或托管 Supabase。
 
 默认地址：
 
 - 应用：http://localhost:17600
 - Supabase API：http://localhost:55321
-- Supabase Studio：http://localhost:54323
-- 本地邮件收件箱：http://localhost:54324
+- 本地验证码邮件：http://127.0.0.1:54324（仅宿主机可访问；远程管理可使用 SSH 隧道）
+- PostgreSQL 和 Studio 默认不对宿主机公开，以减少攻击面。需要排障时可临时在 Compose 中添加相应端口映射。
+
+2 核 2 GB 主机应额外配置至少 2 GB swap，并避免在同一主机运行其他高内存服务。首次拉取和数据库迁移是资源峰值阶段；稳定运行后使用 `docker stats` 观察总内存，如果持续接近 1.7 GB，应升级到 4 GB 或改用托管 Supabase。外层后端镜像大小不是主要占用，`supabase-docker` 卷中的内部镜像与数据库才是磁盘占用主体。
 
 从其他电脑访问时，应在 `.env` 把 `SUPABASE_URL` 设置为 Docker 主机的 LAN 地址，例如 `http://192.168.1.10:55321`，因为浏览器中的 `localhost` 始终指向访问者自己的电脑。
 
